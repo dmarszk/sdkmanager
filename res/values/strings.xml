@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="url_hint">Manifest URL</string>
+	<string name="url_default">https://dl-ssl.google.com/android/repository/</string>
+	<string name="app_name">SDK Manager</string>
+	<string name="button_fetch">Fetch</string>
+	<string name="display_activity_name">Fetch results</string>
+	<string name="tggdisplay_activity_name">Fetch results title</string>
+</resources>
