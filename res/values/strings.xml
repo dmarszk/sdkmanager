@@ -4,6 +4,13 @@
 	<string name="url_default">https://dl-ssl.google.com/android/repository/</string>
 	<string name="app_name">SDK Manager</string>
 	<string name="button_fetch">Fetch</string>
+	<string name="button_settings">Settings</string>
 	<string name="display_activity_name">Fetch results</string>
-	<string name="tggdisplay_activity_name">Fetch results title</string>
+	<string name="pref_doNotInflate">Don\'t inflate archives</string>
+	<string name="pref_doNotInflate_summ">Enabling it makes manager not unpack downloaded archives</string>
+	<string name="pref_storageDir">Storage directory</string>
+	<string name="pref_storageDir_summ">A path within internal SD card</string>
+	<string name="pref_allowNetUsage">Allow cellular network usage</string>
+	<string name="pref_allowNetUsage_summ">Enables downloading archives through data connection</string>
+	
 </resources>

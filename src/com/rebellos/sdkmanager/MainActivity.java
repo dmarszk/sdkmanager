@@ -10,6 +10,8 @@ import java.io.*;
 import java.net.*;
 import javax.xml.parsers.*;
 import org.w3c.dom.*;
+import android.preference.*;
+import android.provider.*;
 
 public class MainActivity extends Activity
 {
@@ -20,7 +22,14 @@ public class MainActivity extends Activity
 	{
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+		PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
     }
+	public void showSettings(View view)
+	{
+		Intent intent = new Intent(this, SettingsActivity.class);
+		startActivity(intent);
+	}
+			
 	public void fetchManifest(View view)
 	{
 		try

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <CheckBoxPreference
+        android:key="pref_doNotInflate"
+        android:title="@string/pref_doNotInflate"
+        android:summary="@string/pref_doNotInflate_summ"
+        android:defaultValue="false" />
+	<CheckBoxPreference
+        android:key="pref_allowNetUsage"
+        android:title="@string/pref_allowNetUsage"
+        android:summary="@string/pref_allowNetUsage_summ"
+        android:defaultValue="false" />
+    <EditTextPreference
+        android:key="pref_storageDir"
+        android:title="@string/pref_storageDir"
+        android:summary="@string/pref_storageDir_summ"
+        android:defaultValue="Android-SDK" />
+</PreferenceScreen>

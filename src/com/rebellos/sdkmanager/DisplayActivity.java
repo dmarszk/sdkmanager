@@ -15,6 +15,7 @@ import java.net.*;
 import java.util.*;
 import javax.xml.parsers.*;
 import org.w3c.dom.*;
+import android.preference.*;
 
 public class DisplayActivity extends Activity
 {
@@ -26,6 +27,9 @@ public class DisplayActivity extends Activity
 	private SDKPackage mSelectedPackage;
 	public SDKArchive enqueuedArchive;
 	public boolean isDownloading = false;
+	public Map<String, String> licenses;
+
+	private String PREFS_NAME = "com.rebellos.sdkmanager.displaydata";
 	@SuppressLint("NewApi")
     @Override
     protected void onCreate(Bundle savedInstanceState)
@@ -33,7 +37,6 @@ public class DisplayActivity extends Activity
         super.onCreate(savedInstanceState);
         setContentView(R.layout.display);
 
-        // Make sure we're running on Honeycomb or higher to use ActionBar APIs
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB)
 		{
             // Show the Up button in the action bar.
@@ -53,6 +56,7 @@ public class DisplayActivity extends Activity
 				}
 			});
 		mPackages = new ArrayList<SDKPackage>();
+		licenses = new HashMap<String, String>();
 		mInfoText.setMovementMethod(new ScrollingMovementMethod());
 		try
 		{
@@ -79,16 +83,27 @@ public class DisplayActivity extends Activity
 							if (DownloadManager.STATUS_SUCCESSFUL == c
                                 .getInt(columnIndex))
 							{
-								Toast.makeText(mPackageList.getContext(), "Succeed " + c.getString(c.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)), Toast.LENGTH_LONG).show();
+								String archivePath = c.getString(c.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI));
+								enqueuedArchive.onDownloadComplete(archivePath);
 								isDownloading = false;
 							}
 						}
+					}
+					else if(DownloadManager.ACTION_NOTIFICATION_CLICKED.equals(action) ||
+					DownloadManager.ACTION_VIEW_DOWNLOADS.equals(action))
+					{
+						
 					}
 				}
 			};
 
 			registerReceiver(receiver, new IntentFilter(
 								 DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+			registerReceiver(receiver, new IntentFilter(
+								 DownloadManager.ACTION_NOTIFICATION_CLICKED));
+			registerReceiver(receiver, new IntentFilter(
+								 DownloadManager.ACTION_VIEW_DOWNLOADS));
+			
 
 		}
 		catch (Exception e)
@@ -112,7 +127,6 @@ public class DisplayActivity extends Activity
 	{
 		return mSelectedPackage.onMenuClick(this, item);
 	}
-
 
 	private class FetchTask extends AsyncTask<String, Void, String>
 	{
@@ -147,10 +161,14 @@ public class DisplayActivity extends Activity
 								|| child.getNodeName().equals("sdk:platform")
 								|| child.getNodeName().equals("sdk:extra"))
 							{
-								mPackages.add(new SDKPackage(child, mPackageList));
+								mPackages.add(new SDKPackage(child, mPackageList, DisplayActivity.this));
 							}
-
-
+							else if(child.getNodeName().equals("sdk:license"))
+							{
+								NamedNodeMap attrs = child.getAttributes();
+								if(attrs.getNamedItem("id") != null)
+									licenses.put(attrs.getNamedItem("id").getTextContent(), child.getTextContent());
+							}
 						}
 					}
 					catch (Exception e)
@@ -190,4 +208,12 @@ public class DisplayActivity extends Activity
 	{
 		((PackagesAdapter) mPackageList.getAdapter()).notifyDataSetChanged();
 	}
+	
+	@Override
+    protected void onDestroy() {
+        super.onDestroy();
+		if(isDownloading)
+			dm.remove(enqueuedArchive.enqueue);
+        // The activity is about to be destroyed.
+    }
 }

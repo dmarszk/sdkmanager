@@ -16,4 +16,10 @@
         android:layout_height="wrap_content"
         android:text="@string/button_fetch" 
 		android:onClick="fetchManifest" />
+	
+	<Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/button_settings" 
+		android:onClick="showSettings" />
 </LinearLayout>

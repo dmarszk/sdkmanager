@@ -2,8 +2,11 @@ package com.rebellos.sdkmanager;
 import android.app.*;
 import android.graphics.*;
 import android.graphics.drawable.*;
+import android.os.*;
+import android.preference.*;
 import android.view.*;
 import android.widget.*;
+import java.io.*;
 import java.util.*;
 import org.w3c.dom.*;
 
@@ -12,32 +15,47 @@ public class SDKPackage
 	String displayName;
 
 	String pkgType;
+	String mInstallPath;
+	String license = null;
 	GradientDrawable mIcon;
+	DisplayActivity mActivity;
+	View mView;
 	Map<String, String> values;
 	List<SDKArchive> archives;
-	boolean installed = false;
-	public SDKPackage(Node srcNode, View view)
+	public SDKPackage(Node srcNode, View view, DisplayActivity activity)
 	{
 		values = new HashMap<String, String>();
 		archives = new ArrayList<SDKArchive>();
 		pkgType = srcNode.getNodeName().substring(4);
 		Node child = srcNode.getFirstChild();
+		mActivity = activity;
+		mView = view;
 		while (child != null)
 		{
-			if (child.getNodeName().startsWith("sdk:"))
-			{
-				values.put(child.getNodeName().substring(4), child.getTextContent());
-			}
 			if (child.getNodeName().equals("sdk:archives"))
 			{
 				Node archiveChild = child.getFirstChild();
 				while (archiveChild != null)
 				{
 					if (archiveChild.getNodeName().equals("sdk:archive"))
-						archives.add(new SDKArchive(archiveChild, view, this));
+						archives.add(new SDKArchive(archiveChild, this));
 					archiveChild = archiveChild.getNextSibling();
 				}
-
+			}
+			else if (child.getNodeName().equals("sdk:uses-license"))
+			{
+				String ref = "UNKNOWN";
+				NamedNodeMap attrs = child.getAttributes();
+				if (attrs.getNamedItem("ref") != null)
+					ref = attrs.getNamedItem("ref").getTextContent();
+				if (mActivity.licenses.containsKey(ref))
+					license = mActivity.licenses.get(ref);
+				else
+					license = "Error! Cannot evaluate license named " + ref;
+			}
+			else if (child.getNodeName().startsWith("sdk:"))
+			{
+				values.put(child.getNodeName().substring(4), child.getTextContent());
 			}
 			child = child.getNextSibling();
 		}
@@ -48,55 +66,128 @@ public class SDKPackage
 		mIcon = iconShape;
 		updateIcon();
 	}
+	
+	void DeleteRecursive(File fileOrDirectory) {
+		if (fileOrDirectory.isDirectory())
+			for (File child : fileOrDirectory.listFiles())
+				DeleteRecursive(child);
+
+		fileOrDirectory.delete();
+	}
+	
+	public void uninstall()
+	{
+		for (SDKArchive archive : archives)
+		{
+			if (archive.isDownloading())
+			{
+				mActivity.dm.remove(archive.enqueue);
+				mActivity.isDownloading = false;
+				Toast.makeText(mView.getContext(), getPackageName() + " download cancelled!", Toast.LENGTH_LONG).show();
+				updateIcon();
+				return;
+			}
+		}
+		File iPath = new File(getInstallPath());
+		if (iPath.exists() && iPath.isDirectory())
+			DeleteRecursive(iPath);
+		updateIcon();
+		Toast.makeText(mView.getContext(), getPackageName() + " uninstalled!", Toast.LENGTH_LONG).show();
+	}
+	
+	public boolean isDownloading()
+	{
+		for (SDKArchive archive : archives)
+		{
+			if (archive.isDownloading())
+				return true;
+		}
+		return false;
+	}
+
+	public boolean isInstalled()
+	{
+		for (SDKArchive archive : archives)
+		{
+			if (archive.isInstalled())
+				return true;
+		}
+		return false;
+	}
 
 	public void updateIcon()
 	{
 		int c = Color.GRAY;
-		for(SDKArchive archive : archives)
+		for (SDKArchive archive : archives)
 		{
-			if(archive.isDownloading())
+			if (archive.isDownloading())
 			{
 				c = Color.YELLOW;
 				break;
 			}
-			else if(archive.isInstalled())
+			else if (archive.isInstalled())
 			{
 				c = Color.GREEN;
 				break;
 			}
 		}
 		mIcon.setColor(c);
+		mActivity.updateList();
 	}
 
 	public void inflateMenu(ContextMenu menu)
 	{
 		menu.setHeaderTitle(getPackageName());
-		int i = 0;
-		for (SDKArchive archive : archives)
+		if (isDownloading())
 		{
-			menu.add(Menu.NONE, i++, Menu.NONE, archive.getArchiveName());
+			menu.add(Menu.NONE, 256, Menu.NONE, "Cancel download");
+		}
+		else if (isInstalled())
+		{
+			menu.add(Menu.NONE, 257, Menu.NONE, "Uninstall");
+		}
+		else
+		{
+			int i = 0;
+			for (SDKArchive archive : archives)
+			{
+				menu.add(Menu.NONE, i++, Menu.NONE, archive.getArchiveName());
+			}
 		}
 	}
 
 	public boolean onMenuClick(Activity parent, MenuItem item)
 	{
-		SDKArchive archive = archives.get(item.getItemId());
-		if (archive != null)
+		if (item.getItemId() >= 256)
+			uninstall();
+		else
 		{
-			archive.onClick(parent);
+			SDKArchive archive = archives.get(item.getItemId());
+			if (archive != null)
+			{
+				archive.onClick(parent);
+			}
 		}
 		return true;
 	}
 
-	public void onClick(View v)
+	public String getInstallPath()
 	{
-		Toast.makeText(v.getContext(), getPackageName(), Toast.LENGTH_LONG).show();
+		if (mInstallPath == null)
+		{
+			mInstallPath = Environment.getExternalStorageDirectory() + "/" +
+				PreferenceManager.getDefaultSharedPreferences(mView.getContext()).getString("pref_storageDir", "") + "/" +
+				pkgType + "/";
+			if (values.containsKey("vendor"))
+				mInstallPath += values.get("vendor") + "/";
+			if (values.containsKey("path"))
+				mInstallPath += values.get("path") + "/";
+			if (pkgType.equals("platform"))
+				mInstallPath += "sdk_" + values.get("version") + "/";
+		}
+		return mInstallPath;
 	}
 
-	public boolean isInstalled()
-	{
-		return installed;
-	}
 	public String getPackageName()
 	{
 		if (displayName == null)

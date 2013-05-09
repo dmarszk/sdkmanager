@@ -9,22 +9,22 @@ import java.io.*;
 import java.util.*;
 import java.util.zip.*;
 import org.w3c.dom.*;
+import android.preference.*;
+import android.os.*;
 
 public class SDKArchive
 {
 	String url, size, checksum, arch, os, sizeString;
-	View view;
 	final DisplayActivity master;
 	private final SDKPackage mParent;
 	public long enqueue;
-	public SDKArchive(Node srcNode, View view, SDKPackage parent)
+	public SDKArchive(Node srcNode, SDKPackage parent)
 	{
 		size = "";
 		arch = "any";
 		os = "any";
-		this.view = view;
 		this.mParent = parent;
-		master = (DisplayActivity) view.getContext();
+		master = (DisplayActivity) parent.mView.getContext();
 		NamedNodeMap attrs = srcNode.getAttributes();
 
 		Node archNode = attrs.getNamedItem("arch");
@@ -61,13 +61,31 @@ public class SDKArchive
 
 	public boolean isInstalled()
 	{
+		File loc = new File(mParent.getInstallPath());
+		if (loc.exists() && loc.isDirectory())
+		{
+			return true;
+		}
 		return false;
 	}
 	public String getDownloadUrl()
 	{
-		if (url.startsWith("http"))
-			return url;
-		return view.getContext().getString(R.string.url_default) + url;
+		if (!url.startsWith("http"))
+			url = mParent.mView.getContext().getString(R.string.url_default) + url;
+		return url;
+	}
+	public String getDownloadPath() throws IOException
+	{
+		String ret = getDownloadUrl();
+		File root = new File(Environment.getExternalStorageDirectory() + "/" +
+			PreferenceManager.getDefaultSharedPreferences(mParent.mView.getContext()).getString("pref_storageDir", ""));
+		if(!root.exists())
+			root.mkdirs();
+		if(root.isFile())
+			throw new IOException("Invalid sdk storage path");
+			
+			
+		return root.getCanonicalPath() + "/" + ret.substring(ret.lastIndexOf('/'));
 	}
 	public String getSizeString()
 	{
@@ -91,11 +109,33 @@ public class SDKArchive
 	}
 	public void onClick(Activity parent)
 	{
-		if(master.isDownloading)
+		if (master.isDownloading)
 		{
-			Toast t = Toast.makeText(view.getContext(), "Download is already pending...", Toast.LENGTH_SHORT);
-			t.setDuration(1500);
+			Toast t = Toast.makeText(mParent.mView.getContext(), "Download is already pending...", Toast.LENGTH_SHORT);
+			t.setDuration(800);
 			t.show();
+			return;
+		}
+		final boolean allowData = PreferenceManager.getDefaultSharedPreferences(mParent.mView.getContext()).getBoolean("pref_allowNetUsage", false);
+		ConnectivityManager connMgr = (ConnectivityManager) 
+			mParent.mView.getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
+		NetworkInfo netInfo = connMgr.getActiveNetworkInfo();
+		if (netInfo == null)
+		{
+			Toast t = Toast.makeText(mParent.mView.getContext(), "No connection available", Toast.LENGTH_SHORT);
+			t.setDuration(800);
+			t.show();
+			return;
+		}
+		else if (!allowData && netInfo.getType() != ConnectivityManager.TYPE_WIFI)
+		{
+			AlertDialog.Builder builder = new AlertDialog.Builder(parent);
+			builder.setMessage("Wi-fi connection is unavailable. Go to the settings if you want to enable downloading.");
+			builder.setNegativeButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+					public void onClick(DialogInterface dialog, int id)
+					{}
+				});
+			builder.create().show();
 			return;
 		}
 		AlertDialog.Builder builder = new AlertDialog.Builder(parent);
@@ -107,15 +147,16 @@ public class SDKArchive
 					{
 						DownloadManager.Request req = new DownloadManager.Request(Uri.parse(getDownloadUrl()));
 						req.setTitle(mParent.getPackageName());
+						req.setAllowedOverMetered(allowData);
+						req.setDestinationUri(Uri.fromFile(new File(getDownloadPath())));
 						enqueue = master.dm.enqueue(req);
 						master.enqueuedArchive = SDKArchive.this;
 						master.isDownloading = true;
 						mParent.updateIcon();
-						master.updateList();
 					}
 					catch (Exception e)
 					{
-						Toast.makeText(view.getContext(), "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+						Toast.makeText(mParent.mView.getContext(), "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
 					}
 				}
 			});
@@ -127,22 +168,61 @@ public class SDKArchive
 			});
 		builder.create().show();
 	}
-	public void onDownloadComplete(String filename)
+	public void onDownloadComplete(String uriString)
 	{
+		String fPath = Uri.parse(uriString).getPath();
+		if (PreferenceManager.getDefaultSharedPreferences(mParent.mView.getContext()).getBoolean("pref_doNotInflate", false))
+		{
+			Toast.makeText(mParent.mView.getContext(), "Stored archive:\n" + fPath, Toast.LENGTH_LONG).show();
+			return;
+		}
 		try
 		{
-			ZipInputStream zip = new ZipInputStream(new FileInputStream(filename));
-			ZipEntry entry = zip.getNextEntry();
-			while((entry = zip.getNextEntry()) != null)
+			ZipInputStream zip = new ZipInputStream(new FileInputStream(fPath));
+			ZipEntry entry;
+			File installDir = new File(mParent.getInstallPath());
+			if (!installDir.exists() || !installDir.isDirectory())
+				installDir.mkdirs();
+			while ((entry = zip.getNextEntry()) != null)
 			{
-				
+				File curFile = new File(installDir + "/" + entry.getName());
+				if (entry.isDirectory())
+				{
+					curFile.mkdirs();
+				}
+				else
+				{
+					BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(curFile.getCanonicalPath(), false), 2048);
+					byte buf[] = new byte[2048];
+					int c;
+					while ((c = zip.read(buf)) != -1)
+						out.write(buf, 0, c);
+					out.flush();
+					out.close();
+				}
 			}
-			
+
 			zip.close();
 		}
 		catch (Exception e)
 		{
-			Toast.makeText(view.getContext(), "Unzip error: " + e.getMessage(), Toast.LENGTH_LONG);
+			Toast.makeText(mParent.mView.getContext(), "Unzip error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+			return;
+		}
+		finally
+		{
+			try
+			{
+				new File(fPath).delete();
+			}
+			catch (Exception e)
+			{
+				Toast.makeText(mParent.mView.getContext(), "File deletion error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+			}
+			finally
+			{
+				Toast.makeText(mParent.mView.getContext(), "Installation completed under " + mParent.getInstallPath(), Toast.LENGTH_LONG).show();
+			}
 		}
 	}
 }
