@@ -17,6 +17,7 @@ public class SDKArchive
 	String url, size, checksum, arch, os, sizeString;
 	final DisplayActivity master;
 	private final SDKPackage mParent;
+	private boolean allowData;
 	public long enqueue;
 	public SDKArchive(Node srcNode, SDKPackage parent)
 	{
@@ -78,13 +79,13 @@ public class SDKArchive
 	{
 		String ret = getDownloadUrl();
 		File root = new File(Environment.getExternalStorageDirectory() + "/" +
-			PreferenceManager.getDefaultSharedPreferences(mParent.mView.getContext()).getString("pref_storageDir", ""));
-		if(!root.exists())
+							 PreferenceManager.getDefaultSharedPreferences(mParent.mView.getContext()).getString("pref_storageDir", ""));
+		if (!root.exists())
 			root.mkdirs();
-		if(root.isFile())
+		if (root.isFile())
 			throw new IOException("Invalid sdk storage path");
-			
-			
+
+
 		return root.getCanonicalPath() + "/" + ret.substring(ret.lastIndexOf('/'));
 	}
 	public String getSizeString()
@@ -107,6 +108,24 @@ public class SDKArchive
 	{
 		return "Arch: " + arch + ", OS: " + os + ", Size: " + getSizeString();
 	}
+	private void initDownload()
+	{
+		try
+		{
+			DownloadManager.Request req = new DownloadManager.Request(Uri.parse(getDownloadUrl()));
+			req.setTitle(mParent.getPackageName());
+			req.setAllowedOverMetered(allowData);
+			req.setDestinationUri(Uri.fromFile(new File(getDownloadPath())));
+			enqueue = master.dm.enqueue(req);
+			master.enqueuedArchive = SDKArchive.this;
+			master.isDownloading = true;
+			mParent.updateIcon();
+		}
+		catch (Exception e)
+		{
+			Toast.makeText(mParent.mView.getContext(), "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+		}
+	}
 	public void onClick(Activity parent)
 	{
 		if (master.isDownloading)
@@ -116,7 +135,7 @@ public class SDKArchive
 			t.show();
 			return;
 		}
-		final boolean allowData = PreferenceManager.getDefaultSharedPreferences(mParent.mView.getContext()).getBoolean("pref_allowNetUsage", false);
+		allowData = PreferenceManager.getDefaultSharedPreferences(mParent.mView.getContext()).getBoolean("pref_allowNetUsage", false);
 		ConnectivityManager connMgr = (ConnectivityManager) 
 			mParent.mView.getContext().getSystemService(Context.CONNECTIVITY_SERVICE);
 		NetworkInfo netInfo = connMgr.getActiveNetworkInfo();
@@ -143,20 +162,29 @@ public class SDKArchive
 		builder.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int id)
 				{
-					try
+					if (mParent.license.isEmpty())
 					{
-						DownloadManager.Request req = new DownloadManager.Request(Uri.parse(getDownloadUrl()));
-						req.setTitle(mParent.getPackageName());
-						req.setAllowedOverMetered(allowData);
-						req.setDestinationUri(Uri.fromFile(new File(getDownloadPath())));
-						enqueue = master.dm.enqueue(req);
-						master.enqueuedArchive = SDKArchive.this;
-						master.isDownloading = true;
-						mParent.updateIcon();
+						initDownload();
 					}
-					catch (Exception e)
+					else
 					{
-						Toast.makeText(mParent.mView.getContext(), "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+						AlertDialog.Builder builder = new AlertDialog.Builder(master);
+						builder.setTitle("Do you agree to the license terms?");
+						builder.setMessage(mParent.license);
+						builder.setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
+								public void onClick(DialogInterface dialog, int id)
+								{
+
+									initDownload();
+								}
+							});
+						builder.setNegativeButton(android.R.string.no, new DialogInterface.OnClickListener() {
+								public void onClick(DialogInterface dialog, int id)
+								{
+									// User cancelled the dialog
+								}
+							});
+						builder.create().show();
 					}
 				}
 			});
