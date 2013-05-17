@@ -134,7 +134,10 @@ public class SDKArchive
 		{
 			DownloadManager.Request req = new DownloadManager.Request(Uri.parse(getDownloadUrl()));
 			req.setTitle(mParent.getPackageName());
-			req.setAllowedOverMetered(allowData);
+			if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN)
+			{
+				req.setAllowedOverMetered(allowData);
+			}
 			req.setDestinationUri(Uri.fromFile(new File(getDownloadPath())));
 			enqueue = master.dm.enqueue(req);
 			master.enqueuedArchive = SDKArchive.this;
